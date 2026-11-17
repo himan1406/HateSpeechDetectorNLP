@@ -1,0 +1,566 @@
+% Upload this single file to Overleaf and choose pdfLaTeX.
+% The bibliography is embedded. No .bib file or external images are needed.
+% Six substantive sections start on separate pages, followed by references.
+% Author and affiliation below come from the supplied project presentation.
+% Recorded measurements come from artifacts/pretrained-hatexplain.json.
+\documentclass[11pt,a4paper]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{mathptmx}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs,tabularx,array}
+\usepackage{microtype}
+\usepackage{xurl}
+\usepackage[hidelinks]{hyperref}
+\usepackage{enumitem}
+\setlist{itemsep=2pt,topsep=4pt}
+\setlength{\parskip}{4pt}
+\setlength{\parindent}{1em}
+\setlength{\emergencystretch}{2em}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcommand{\artifact}[1]{\texttt{\detokenize{#1}}}
+
+\title{Hate Speech Detection through Explainable AI and Moderator Feedback\\[4pt]
+\large An NLP Prototype and a Framework for Reward Optimization}
+\author{Moksha Sharma\\Department of Computer Science and Engineering\\Bennett University}
+\date{November 2026}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+Hate speech detection requires decisions that moderators can inspect and correct.
+This paper presents an NLP prototype that combines a pretrained text classifier,
+word attributions, and persistent moderator feedback. The executable application
+uses a downloaded TF-IDF and logistic regression pipeline. SHAP and LIME explain
+its class probabilities through token deletion, while a review interface records
+confirmations and corrections. An existing evaluation on 1,923 deduplicated
+HateXplain test posts gives 62.77\% accuracy, 42.36\% hate precision, 56.90\% hate
+recall, and 48.56\% hate F1 at a fixed threshold of 0.50. SHAP achieves mean
+token-overlap F1 of 0.513 on a sample of 30 hateful posts with human rationales.
+The publisher's precise training corpus and split are unspecified, so these
+measurements describe behavior on the evaluation corpus with possible training
+overlap. We also specify an offline preference-optimization objective and
+describe source modules for a classical SVM baseline, multilingual transformer,
+and image--caption classification. Their performance remains to be established.
+The prototype provides an inspectable moderation workflow and a concrete
+experimental basis for studying classification errors, explanation quality,
+and feedback-driven adaptation.
+\end{abstract}
+\noindent\textbf{Keywords}\quad Natural language processing, hate speech,
+explainable AI, SHAP, LIME, human feedback, preference optimization.
+
+\section{Introduction}
+Online moderation involves language whose meaning depends on context, target,
+and communicative intent. A post can contain offensive vocabulary while quoting
+or condemning discrimination. Conversely, an exclusionary statement can target
+a community through indirect expressions. Davidson et al. demonstrate why hate
+and offensive language require distinct labels \cite{davidson}. This distinction
+motivates the binary task used here, where hate is the positive class and other
+source labels are combined into the negative class.
+
+A prediction score provides limited assistance when the reviewer cannot inspect
+which parts of a post affected it. Explanation methods can expose influential
+words, and a review interface can capture a correction with its original model
+context. However, visible highlights need evaluation. They can reflect lexical
+shortcuts or perturbation artifacts, and agreement with an annotation captures
+only one aspect of explanation quality \cite{eraser}.
+
+The project investigates how classification, explanation, and recorded review
+can operate in one reproducible workflow. Its measured contribution is an
+integrated prototype and an evaluation of a frozen third-party classifier. Its
+research framework extends that workflow with offline preference optimization,
+multilingual modeling, and image--caption experiments. The evaluation answers
+three questions. How does the available classifier behave under a consistent
+hate-only label mapping? How closely do supportive word attributions align with
+annotated evidence? What information must a review record preserve to support
+a later, auditable model update?
+
+The resulting system exposes the predicted label, hate probability, configurable
+threshold, signed word effects, and review controls. The paper reports the
+available measurements and identifies the additional experiments required for
+claims about adaptation, generalization, or multilingual coverage.
+
+\clearpage
+\section{Related Work}
+\subsection{Hate speech datasets and contextual models}
+HateXplain supplies class labels, target annotations, and human rationales,
+supporting joint examination of classification and explanatory evidence
+\cite{hatexplain}. The Davidson dataset distinguishes hate speech, offensive
+language, and neither \cite{davidson}. HASOC expands the dataset landscape to
+Indo-European languages and illustrates the importance of edition-specific
+task definitions \cite{hasoc}. A shared binary task therefore requires explicit
+mapping rules. Combining an offensive category with hate would change the
+research question and the meaning of the reported precision.
+
+The Transformer architecture introduced self-attention as a general mechanism
+for sequence modeling \cite{attention}. BERT adapts bidirectional pretraining
+to downstream language tasks \cite{bert}. HateBERT investigates additional
+pretraining on abusive English content, demonstrating the relevance of domain
+adaptation for this task family \cite{hatebert}. XLM-R provides a multilingual
+encoder that can support later experiments involving Hindi and English
+\cite{xlmr}. Multilingual pretraining alone leaves open whether a classifier
+has learned the local categories and code-mixed expressions required by a
+particular moderation setting.
+
+The Hateful Memes benchmark introduces examples where image and caption
+must be considered jointly \cite{memes}. It motivates the project's separate
+image--caption route, whose evaluation includes both single-modality models
+and a fused model. This comparison is necessary to determine whether a system
+uses information from both modalities.
+
+\subsection{Explanations and diagnostic evaluation}
+LIME estimates a simple model near an input using weighted perturbations
+\cite{lime}. SHAP provides an additive feature-attribution framework grounded
+in Shapley values \cite{shap}. Both can query a common probability interface,
+making them suitable for comparing classifier backends. Their outputs depend
+on the feature representation and on how perturbed inputs are constructed.
+
+ERASER distinguishes agreement with human rationales from faithfulness to a
+model's prediction \cite{eraser}. HARE studies step-by-step reasoning for
+explainable hate speech detection \cite{hare}. The present application uses
+token attributions, while natural-language reasoning remains a possible
+extension requiring its own verification. HateCheck provides functional tests
+that complement aggregate accuracy and F1 \cite{hatecheck}. Such tests are
+relevant for quotation, negation, identity mentions, and implicit attacks.
+
+\subsection{Feedback, fairness, and reporting}
+Instruction tuning with human feedback demonstrates a route for adapting
+language models to reviewed outputs \cite{ouyang}. Direct Preference
+Optimization (DPO) formulates preference learning through probability ratios
+relative to a reference model \cite{dpo}. Our proposed adaptation uses a
+reviewed binary label as the preferred answer, which requires evaluation on
+this classification setting before any improvement claim.
+
+Sap et al. identify racial bias risks in hate speech detection \cite{sap}.
+This motivates slice diagnostics and targeted error inspection. Model cards
+and dataset datasheets offer documentation frameworks for intended use,
+collection conditions, and limitations \cite{modelcards,datasheets}.
+The prototype follows these reporting goals by recording model provenance,
+label mappings, and evaluation scope.
+
+\clearpage
+\section{Data Preparation and Classification Method}
+\subsection{Task and canonical representation}
+Let $x$ denote a social media post and $y\in\{0,1\}$ its target label. The
+project maps hateful content to $1$ and the remaining mapped categories to
+$0$. A canonical record contains an identifier, text, label, language,
+optional annotated target groups, optional token rationales, and an optional
+split assignment. Multiple groups can occur in one post.
+
+The HateXplain adapter uses a strict majority over the source annotation
+classes and discards ties. Majority hate maps to $1$. Majority offensive or
+normal maps to $0$. This order matters because voting after collapsing the
+classes can produce a different label. For hateful examples, available aligned
+annotator rationale masks are combined through a positional union. Unicode
+NFC normalization and whitespace normalization precede splitting.
+
+\subsection{Splits and duplicate handling}
+The implementation uses HateXplain revision
+\artifact{01d742279dac941981f53806154481c0e15ee686} and its official split map.
+Normalized, case-folded text identifies exact duplicates. With official
+assignments, each duplicate group retains the record from the most held-out
+split, prioritizing test, then validation, then train. With an unsplit corpus,
+duplicate groups with conflicting labels are excluded before seeded splitting.
+The resulting HateXplain corpus contains
+19,192 posts, distributed as shown in Table~\ref{tab:splits}. Exact matching
+does not remove paraphrases, shared templates, or author-level dependencies.
+
+\begin{table}[ht]
+\centering
+\caption{Deduplicated HateXplain split sizes used by the saved evaluation.}
+\label{tab:splits}
+\begin{tabular}{lr}
+\toprule
+Split & Posts\\
+\midrule
+Train & 15,348\\
+Validation & 1,921\\
+Test & 1,923\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Frozen classifier used in the prototype}
+The application loads the public model
+\artifact{pajola/hate-speech-detection-lr-tfidf} at revision
+\artifact{8523992895f5145361e49212af7f1d6c94b8f7a9} \cite{checkpoint}.
+The artifact is a scikit-learn pipeline containing TF-IDF vectorization and
+logistic regression. Its source classes are hate, offensive, and neither.
+The wrapper exposes a binary interface by assigning the hate-class probability
+to $p_1(x)$ and the sum of the other probabilities to $p_0(x)$. Predictions use
+\begin{equation}
+\widehat{y}(x)=\mathbb{I}[p_1(x)\geq\tau],\qquad \tau=0.50.
+\end{equation}
+This decision rule can differ from taking the largest of the original three
+class probabilities.
+
+The publisher's preprocessing lowercases text and removes URLs, mentions,
+hashtags, the retweet marker, punctuation, and extra whitespace. Those rules
+are reproduced inside inference, including when the explanation engine
+queries perturbed inputs. A vocabulary check signals when a post yields no
+recognized TF-IDF features. Such a score reflects the classifier's intercept
+and requires especially careful interpretation.
+
+\subsection{Reproducible supervised baseline}
+The project also preserves training code for a word- and character-TF-IDF
+linear SVM using scikit-learn \cite{sklearn}. Word features cover unigrams and
+bigrams, character features cover lengths two through five, and the SVM uses
+balanced class weights. Cross-validation calibration maps margins to class
+probabilities. This baseline has its own classroom walkthrough. The numerical
+results in this paper belong to the downloaded logistic regression model.
+
+\clearpage
+\section{Explanations and the Feedback Framework}
+\subsection{Position-based perturbations}
+For a post with $m$ whitespace-delimited tokens, let
+$z\in\{0,1\}^{m}$ indicate retained token positions. A rendering function
+$h_x(z)$ deletes masked tokens while maintaining the surviving token order.
+Repeated occurrences receive separate positions and original-text offsets.
+The explanation target is $f_c(z)=p_c(h_x(z))$ for selected class $c$.
+Explaining the displayed class makes a positive attribution support the
+displayed decision and a negative attribution oppose it.
+
+For SHAP, the implementation uses exact evaluation for at most eight tokens.
+Longer inputs use a permutation explainer with a budget of
+$5(2m+1)$ evaluations. The baseline is a fully deleted post. The additive
+interpretation is
+\begin{equation}
+f_c(\mathbf{1})\approx f_c(\mathbf{0})+\sum_{i=1}^{m}\phi_i.
+\end{equation}
+Permutation estimates approximate the feature contributions under this
+deletion mechanism \cite{shap}.
+
+The LIME route generates 256 binary masks, including the original input, and
+fits a local weighted regression through LIME's base implementation
+\cite{lime}. Its distance from the original mask is
+$d(z)=100(1-\sqrt{m^{-1}\sum_i z_i})$, with kernel
+$K(d)=\exp[-\tfrac12(d/25)^2]$. The resulting coefficients measure local effects
+under the sampled perturbation neighborhood. Deletions can produce unnatural
+language, so their weights should be interpreted in that experimental context.
+
+\subsection{Rationale agreement}
+For a human-highlighted set $H$, let $k=|H|$. The explanation set $A$ contains
+the positive-scoring positions among the top $k$ attributions for the hate
+class. The implementation computes
+\begin{equation}
+P_r=\frac{|A\cap H|}{|A|},\quad
+R_r=\frac{|A\cap H|}{|H|},\quad
+F_{1,r}=\frac{2P_rR_r}{P_r+R_r}.
+\end{equation}
+Zero-support cases use zero precision where appropriate, and empty human masks
+are skipped. The overlap score $|A\cap H|/|A\cup H|$ provides an additional
+measure. Document scores are averaged across evaluated posts. Because $k$
+comes from the human rationale, this protocol measures agreement at a known
+annotation length. It does not test autonomous selection of rationale length.
+
+\subsection{Review records and offline preferences}
+The Streamlit interface stores a prediction identifier, normalized text,
+checkpoint identifier, score, threshold, predicted label, reviewed label, and
+timestamp in a local SQLite database. Confirmations receive reward $+1$ and
+corrections receive $-1$. Repeated submission of a prediction identifier is
+idempotent. Saving a decision creates a review record for later experimentation.
+
+For the transformer extension, let $y^+$ be the reviewed label and
+$y^-=1-y^+$. With a frozen reference classifier $p_{\rm ref}$, define
+\begin{equation}
+\Delta_\theta(x)=
+\log\frac{p_\theta(y^+\mid x)}{p_\theta(y^-\mid x)}-
+\log\frac{p_{\rm ref}(y^+\mid x)}{p_{\rm ref}(y^-\mid x)}.
+\end{equation}
+The implemented experimental objective is
+$\mathcal{L}_{\rm pref}=-\mathbb{E}\log\sigma(\beta\Delta_\theta(x))$, adapting
+the DPO formulation to two class outputs \cite{dpo}. The stored agreement reward
+is an audit signal. The reviewed label determines the preference pair.
+The tuning path excludes validation and test text matches, keeps the latest
+eligible decision per post, and saves a separate candidate checkpoint.
+No measured reward-tuning result is available in this study.
+
+\clearpage
+\section{Evaluation and Recorded Results}
+\subsection{Protocol and scope}
+All numerical results below come from the saved report
+\artifact{artifacts/pretrained-hatexplain.json}. The report records seed 42,
+the deduplicated split assignment, and the frozen threshold 0.50. Its test set
+contains 594 hateful and 1,329 non-hateful posts. The pretrained model's
+original training split is undocumented, so possible overlap with HateXplain
+prevents treating this evaluation as verified unseen-data generalization.
+The project's own training partition was unused in this inference experiment.
+
+Precision measures the hateful fraction among flagged posts, while recall
+measures the detected fraction of hateful posts. Macro F1 averages the F1
+values of the two classes. Table~\ref{tab:metrics} summarizes the measurements.
+
+\begin{table}[ht]
+\centering
+\caption{Frozen pretrained classifier results, expressed as percentages.}
+\label{tab:metrics}
+\begin{tabular}{lrr}
+\toprule
+Metric & Validation & Test\\
+\midrule
+Accuracy & 64.71 & 62.77\\
+Hate precision & 44.26 & 42.36\\
+Hate recall & 55.31 & 56.90\\
+Hate F1 & 49.18 & 48.56\\
+Macro F1 & 61.07 & 59.69\\
+False-positive rate & 31.10 & 34.61\\
+False-negative rate & 44.69 & 43.10\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[ht]
+\centering
+\caption{Test confusion matrix. Rows are gold labels and columns are predictions.}
+\label{tab:confusion}
+\begin{tabular}{lrr}
+\toprule
+ & Predicted non-hateful & Predicted hateful\\
+\midrule
+Gold non-hateful & 869 & 460\\
+Gold hateful & 256 & 338\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The classifier flags 798 test posts, of which 460 are false positives.
+It misses 256 of the 594 hateful posts. An always-non-hateful rule would obtain
+$1329/1923=69.11\%$ accuracy, exceeding this model's accuracy while having zero
+hate recall. This comparison shows why the reported accuracy requires the
+class-specific metrics and error counts. The model's operating point leaves
+substantial work for a moderator, and the experiment supplies no evidence that
+this threshold optimizes any deployment cost.
+
+\subsection{Explanation measurements}
+The report samples 30 posts from 594 hateful test posts with nonempty human
+rationales using the seeded sampling procedure. SHAP obtains mean rationale
+precision 0.624, recall 0.475, F1 0.513, and intersection-over-union 0.415.
+These are averages of per-post metrics. Consequently, the harmonic mean of the
+reported mean precision and mean recall need not equal the reported mean F1.
+The experiment targets the gold hateful class, including when the classifier
+predicts non-hateful. It therefore measures evidence alignment for that class
+across the sampled hateful posts.
+
+The small sample and union-based human mask limit interpretation. No confidence
+interval, LIME rationale score, controlled explanation ablation, or human
+usability study was recorded. The integration checks exercised both explainers
+and the review workflow, but operational checks do not establish explanation
+usefulness or improvements in moderator decisions.
+
+\clearpage
+\section{Discussion, Limitations, and Future Experiments}
+\subsection{Target-group diagnostics and validity}
+Table~\ref{tab:groups} shows selected slices from the test report. Group labels
+are reproduced from the dataset and describe annotated targets. They provide
+no verified information about the author of a post. Slices can overlap.
+False-positive rates use the negative support $N_0$, while false-negative rates
+use positive support $N_1$.
+
+\begin{table}[ht]
+\centering
+\caption{Selected target slices. Error rates are percentages, with denominators shown.}
+\label{tab:groups}
+\begin{tabular}{lrrrr}
+\toprule
+Source target label & $N_0$ & $N_1$ & FPR & FNR\\
+\midrule
+African & 173 & 261 & 45.09 & 27.59\\
+Arab & 57 & 103 & 31.58 & 46.60\\
+Asian & 42 & 26 & 35.71 & 69.23\\
+Caucasian & 117 & 39 & 62.39 & 25.64\\
+Homosexual & 159 & 90 & 64.15 & 31.11\\
+Islam & 129 & 149 & 28.68 & 57.05\\
+Jewish & 76 & 155 & 39.47 & 44.52\\
+Women & 258 & 99 & 28.29 & 44.44\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The variation warrants error inspection. These observational slices mix
+different contexts and vocabulary, and several denominators are small.
+They cannot independently identify the cause of a disparity. A fuller audit
+would combine bootstrap uncertainty estimates, controlled identity substitutions,
+and functional tests \cite{sap,hatecheck}. The English evaluation also leaves
+Hindi, Hinglish, and other language varieties unmeasured. The publisher's
+punctuation and emoji removal may discard useful context, which motivates
+testing alternative preprocessing under controlled training conditions.
+
+\subsection{Planned model and feedback comparisons}
+The repository contains supervised transformer and binary preference-tuning
+source using PyTorch and Hugging Face Transformers \cite{pytorch,transformers}.
+A subsequent experiment should compare a newly fitted SVM and an XLM-R
+classifier on identical documented splits. Model selection and any threshold
+tuning should use validation data. The test partition should be reserved for
+the fixed comparison. LoRA offers a possible compute-saving adaptation method
+for later experiments \cite{lora}, while the current transformer source uses
+ordinary fine-tuning.
+
+Feedback experiments require independently reviewed posts and adjudication of
+ambiguous decisions. A useful comparison would evaluate frozen inference,
+supervised retraining on corrections, and binary preference tuning using the
+same review budget. Each candidate should be checked for class-specific errors,
+calibration, and regressions on examples outside the feedback stream. Feedback
+collected only from model flags can introduce selection bias. A random sample
+of unflagged posts is needed to investigate missed cases.
+
+The experimental image--caption module fuses frozen vision embeddings with
+caption TF-IDF features and provides single-modality comparisons. It still
+requires a documented meme dataset, independently assigned splits, and measured
+results. No multimodal performance is reported here. Explanations for text
+alone also leave open how visual evidence should be presented and assessed.
+
+\subsection{Responsible use and conclusion}
+Review storage contains user-entered text, so retention, access, and deletion
+policies must be defined before use with operational moderation data. Human
+decisions can contain disagreement or bias and require quality controls.
+Model and dataset documentation should make these conditions explicit
+\cite{modelcards,datasheets}.
+
+The implemented prototype connects frozen hate speech classification, signed
+word attributions, and persistent moderator decisions. Its measured F1 of
+48.56\%, false-positive burden, and limited rationale sample identify concrete
+research priorities. The next stage is to establish independent evaluation
+data and test whether contextual modeling and reviewed preferences improve
+the complete workflow under a consistent definition of hate speech.
+
+\clearpage
+\begin{thebibliography}{99}
+\small
+\bibitem{davidson}
+T. Davidson, D. Warmsley, M. Macy, and I. Weber.
+Automated Hate Speech Detection and the Problem of Offensive Language.
+\emph{Proceedings of ICWSM}, 2017.
+\url{https://arxiv.org/abs/1703.04009}.
+
+\bibitem{hatexplain}
+B. Mathew, P. Saha, S. M. Yimam, C. Biemann, P. Goyal, and A. Mukherjee.
+HateXplain: A Benchmark Dataset for Explainable Hate Speech Detection.
+\emph{Proceedings of AAAI}, 2021.
+\url{https://arxiv.org/abs/2012.10289}.
+
+\bibitem{hasoc}
+T. Mandl et al.
+Overview of the HASOC Track at FIRE 2019: Hate Speech and Offensive Content
+Identification in Indo-European Languages.
+\emph{Proceedings of FIRE}, 2019.
+\url{https://doi.org/10.1145/3368567.3368584}.
+
+\bibitem{attention}
+A. Vaswani et al. Attention Is All You Need.
+\emph{Advances in Neural Information Processing Systems}, 2017.
+\url{https://arxiv.org/abs/1706.03762}.
+
+\bibitem{bert}
+J. Devlin, M.-W. Chang, K. Lee, and K. Toutanova.
+BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding.
+\emph{Proceedings of NAACL-HLT}, 2019.
+\url{https://aclanthology.org/N19-1423/}.
+
+\bibitem{hatebert}
+T. Caselli, V. Basile, J. Mitrovi\'{c}, and M. Granitzer.
+HateBERT: Retraining BERT for Abusive Language Detection in English.
+\emph{Proceedings of the Workshop on Online Abuse and Harms}, 2021.
+\url{https://arxiv.org/abs/2010.12472}.
+
+\bibitem{xlmr}
+A. Conneau et al.
+Unsupervised Cross-lingual Representation Learning at Scale.
+\emph{Proceedings of ACL}, 2020.
+\url{https://arxiv.org/abs/1911.02116}.
+
+\bibitem{memes}
+D. Kiela, H. Firooz, A. Mohan, V. Goswami, A. Singh, P. Ringshia, and D. Testuggine.
+The Hateful Memes Challenge: Detecting Hate Speech in Multimodal Memes.
+\emph{Advances in Neural Information Processing Systems}, 2020.
+\url{https://arxiv.org/abs/2005.04790}.
+
+\bibitem{lime}
+M. T. Ribeiro, S. Singh, and C. Guestrin.
+``Why Should I Trust You?'': Explaining the Predictions of Any Classifier.
+\emph{Proceedings of ACM SIGKDD}, 2016.
+\url{https://arxiv.org/abs/1602.04938}.
+
+\bibitem{shap}
+S. M. Lundberg and S.-I. Lee.
+A Unified Approach to Interpreting Model Predictions.
+\emph{Advances in Neural Information Processing Systems}, 2017.
+\url{https://arxiv.org/abs/1705.07874}.
+
+\bibitem{eraser}
+J. DeYoung, S. Jain, N. F. Rajani, E. Lehman, C. Xiong, R. Socher, and B. C. Wallace.
+ERASER: A Benchmark to Evaluate Rationalized NLP Models.
+\emph{Proceedings of ACL}, 2020.
+\url{https://aclanthology.org/2020.acl-main.408/}.
+
+\bibitem{hare}
+Y. Yang, J. Kim, Y. Kim, N. Ho, J. Thorne, and S.-Y. Yun.
+HARE: Explainable Hate Speech Detection with Step-by-Step Reasoning.
+\emph{Findings of EMNLP}, 2023.
+\url{https://aclanthology.org/2023.findings-emnlp.365/}.
+
+\bibitem{hatecheck}
+P. R\"{o}ttger, B. Vidgen, D. Nguyen, Z. Waseem, H. Margetts, and J. Pierrehumbert.
+HateCheck: Functional Tests for Hate Speech Detection Models.
+\emph{Proceedings of ACL-IJCNLP}, 2021.
+\url{https://aclanthology.org/2021.acl-long.4/}.
+
+\bibitem{ouyang}
+L. Ouyang et al.
+Training Language Models to Follow Instructions with Human Feedback.
+\emph{Advances in Neural Information Processing Systems}, 2022.
+\url{https://arxiv.org/abs/2203.02155}.
+
+\bibitem{dpo}
+R. Rafailov, A. Sharma, E. Mitchell, S. Ermon, C. D. Manning, and C. Finn.
+Direct Preference Optimization: Your Language Model Is Secretly a Reward Model.
+\emph{Advances in Neural Information Processing Systems}, 2023.
+\url{https://arxiv.org/abs/2305.18290}.
+
+\bibitem{sap}
+M. Sap, D. Card, S. Gabriel, Y. Choi, and N. A. Smith.
+The Risk of Racial Bias in Hate Speech Detection.
+\emph{Proceedings of ACL}, 2019.
+\url{https://aclanthology.org/P19-1163/}.
+
+\bibitem{modelcards}
+M. Mitchell et al. Model Cards for Model Reporting.
+\emph{Proceedings of FAT*}, 2019.
+\url{https://arxiv.org/abs/1810.03993}.
+
+\bibitem{datasheets}
+T. Gebru, J. Morgenstern, B. Vecchione, J. W. Vaughan, H. Wallach,
+H. Daum\'{e} III, and K. Crawford.
+Datasheets for Datasets.
+\emph{Communications of the ACM}, 64(12), 2021.
+\url{https://arxiv.org/abs/1803.09010}.
+
+\bibitem{sklearn}
+F. Pedregosa et al. Scikit-learn: Machine Learning in Python.
+\emph{Journal of Machine Learning Research}, 12, 2011.
+\url{https://jmlr.org/papers/v12/pedregosa11a.html}.
+
+\bibitem{pytorch}
+A. Paszke et al.
+PyTorch: An Imperative Style, High-Performance Deep Learning Library.
+\emph{Advances in Neural Information Processing Systems}, 2019.
+\url{https://arxiv.org/abs/1912.01703}.
+
+\bibitem{transformers}
+T. Wolf et al. Transformers: State-of-the-Art Natural Language Processing.
+\emph{Proceedings of EMNLP System Demonstrations}, 2020.
+\url{https://aclanthology.org/2020.emnlp-demos.6/}.
+
+\bibitem{lora}
+E. J. Hu et al. LoRA: Low-Rank Adaptation of Large Language Models.
+\emph{Proceedings of ICLR}, 2022.
+\url{https://arxiv.org/abs/2106.09685}.
+
+\bibitem{checkpoint}
+pajola. Hate Speech Detection LR-TFIDF.
+Hugging Face model card and pretrained artifact, revision
+\artifact{8523992895f5145361e49212af7f1d6c94b8f7a9}.
+Accessed November 17, 2026.
+\url{https://huggingface.co/pajola/hate-speech-detection-lr-tfidf}.
+\end{thebibliography}
+\end{document}
