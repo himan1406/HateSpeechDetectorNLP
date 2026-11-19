@@ -5,3 +5,45 @@ __pycache__/
 artifacts/
 data/*
 !data/demo.csv
+
+# Local secrets (never commit)
+.reddit-credentials.json
+
+# Local environments
+venv/
+.venv/
+env/
+
+# Python caches and build output
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.tox/
+.coverage
+htmlcov/
+*.egg-info/
+build/
+dist/
+
+# Generated caches, dossiers, and model artifacts
+artifacts/
+data/*
+!data/demo.csv
+*.sqlite3
+*.db
+*.log
+
+# Editor and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local secrets (never commit)
+.reddit-credentials.json
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
